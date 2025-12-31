@@ -9,7 +9,12 @@ from passlib.context import CryptContext
 from datetime import datetime, timedelta
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/GYM_MANAGEMENT")
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# This forces passlib to use the 'bcrypt' package instead of its broken internal logic
+pwd_context = CryptContext(
+    schemes=["bcrypt"], 
+    deprecated="auto", 
+    bcrypt__backend="bcrypt"  # <--- ADD THIS PARAMETER
+)
 app = FastAPI(title="GymTech Pro API")
 
 app.add_middleware(
@@ -193,3 +198,4 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
