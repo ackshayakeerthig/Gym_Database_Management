@@ -8,14 +8,6 @@ from psycopg2.extras import RealDictCursor
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/GYM_MANAGEMENT")
-# --- CONFIGURATION ---
-DB_CONFIG = {
-    "host": "localhost",
-    "database": "GYM_MANAGEMENT",
-    "user": "postgres",
-    "password": "postgres",
-    "port": "5432"
-}
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 app = FastAPI(title="GymTech Pro API")
@@ -49,7 +41,7 @@ class ProfileUpdate(BaseModel):
 # --- AUTH LOGIC (Auto-detect Role) ---
 @app.post("/login")
 def login(req: LoginRequest):
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     
     # 1. Check Members Table
@@ -79,7 +71,7 @@ def login(req: LoginRequest):
 
 @app.get("/member/{id}/profile")
 def get_member_profile(id: int):
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("""
         SELECT m.*, e.plan_name as current_plan 
@@ -93,7 +85,7 @@ def get_member_profile(id: int):
 
 @app.put("/member/{id}/profile")
 def update_member_profile(id: int, data: ProfileUpdate):
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     try:
         cur.execute("""
@@ -115,14 +107,14 @@ def update_member_profile(id: int, data: ProfileUpdate):
 
 @app.get("/member/{id}/calendar")
 def get_workout_calendar(id: int):
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("SELECT recorded_at, activity_type, details FROM Member_Activity_Docs WHERE member_id = %s ORDER BY recorded_at DESC", (id,))
     return cur.fetchall()
 
 @app.get("/equipment/status")
 def get_gym_health():
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("SELECT status, COUNT(*) FROM Equipment_Assets GROUP BY status")
     stats = cur.fetchall()
@@ -134,14 +126,14 @@ def get_gym_health():
 
 @app.get("/employee/colleagues")
 def get_colleagues():
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("SELECT name, role, email, phone FROM Employees")
     return cur.fetchall()
 
 @app.get("/classes/all")
 def get_all_classes():
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("""
         SELECT s.*, e.name as trainer_name, 
@@ -152,7 +144,7 @@ def get_all_classes():
 
 @app.patch("/attendance/{booking_id}")
 def mark_attendance(booking_id: int, attended: bool):
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("UPDATE Class_Bookings SET attended = %s WHERE booking_id = %s", (attended, booking_id))
     conn.commit()
@@ -160,7 +152,7 @@ def mark_attendance(booking_id: int, attended: bool):
 
 @app.get("/inventory/all")
 def get_inventory():
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("SELECT *, (current_stock < 10) as low_stock FROM Inventory_Catalog")
     return cur.fetchall()
@@ -169,7 +161,7 @@ def get_inventory():
 
 @app.get("/manager/analytics")
 def get_financials():
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("SELECT SUM(final_price_paid) FROM Membership_Enrollments")
     revenue = cur.fetchone()['sum'] or 0
@@ -179,7 +171,7 @@ def get_financials():
 
 @app.get("/manager/staff")
 def get_staff_management():
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
     cur.execute("""
         SELECT e1.*, e2.name as manager_name 
@@ -199,4 +191,5 @@ def chat_endpoint(message: str, user_id: int, role: str):
 
 if __name__ == "__main__":
     import uvicorn
+
     uvicorn.run(app, host="0.0.0.0", port=8000)
