@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -6,7 +7,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
-
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/GYM_MANAGEMENT")
 # --- CONFIGURATION ---
 DB_CONFIG = {
     "host": "localhost",
@@ -28,7 +29,8 @@ app.add_middleware(
 
 # --- DATABASE UTILS ---
 def get_db():
-    conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    # conn = psycopg2.connect(**DB_CONFIG, cursor_factory=RealDictCursor)
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     try:
         yield conn
     finally:
