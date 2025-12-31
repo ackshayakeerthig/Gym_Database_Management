@@ -1,3 +1,4 @@
+import bcrypt
 import os
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,8 +13,7 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localho
 # This forces passlib to use the 'bcrypt' package instead of its broken internal logic
 pwd_context = CryptContext(
     schemes=["bcrypt"], 
-    deprecated="auto", 
-    bcrypt__backend="bcrypt"  # <--- ADD THIS PARAMETER
+    deprecated="auto"
 )
 app = FastAPI(title="GymTech Pro API")
 
@@ -198,4 +198,5 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
