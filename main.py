@@ -58,6 +58,10 @@ class StockUpdate(BaseModel):
 class StaffUpdate(BaseModel):
     salary: Optional[float] = None
     reports_to: Optional[int] = None
+
+class BookingCreate(BaseModel):
+    member_id: int
+    schedule_id: int
 # --- AUTH LOGIC (Auto-detect Role) ---
 @app.post("/login")
 def login(req: LoginRequest):
@@ -173,6 +177,39 @@ def get_member_bookings(id: int):
         WHERE cb.member_id = %s
     """, (id,))
     return cur.fetchall()
+    
+@app.post("/bookings")
+def create_booking(req: BookingCreate):
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    try:
+        # We don't need manual checks here because our SQL triggers:
+        # 1. trg_cap: Checks for class capacity
+        # 2. trg_verify: Checks for Active Paid Membership
+        # 3. unique_member_class_booking: Prevents double booking
+        
+        cur.execute("""
+            INSERT INTO Class_Bookings (member_id, schedule_id, booking_date, attended) 
+            VALUES (%s, %s, CURRENT_DATE, False)
+        """, (req.member_id, req.schedule_id))
+        
+        conn.commit()
+        return {"message": "Booking successful", "status": "success"}
+
+    except psycopg2.Error as e:
+        conn.rollback()
+        # This catches the RAISE EXCEPTION messages from your SQL triggers
+        # e.g., "Class is full!" or "No active membership on this date"
+        error_msg = str(e.pgerror).split("CONTEXT:")[0] if hasattr(e, 'pgerror') else str(e)
+        raise HTTPException(status_code=400, detail=error_msg)
+    
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail="Internal Server Error")
+    finally:
+        cur.close()
+        conn.close()
+
 
 @app.get("/classes/available")
 def get_available_classes():
@@ -379,6 +416,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
