@@ -8,6 +8,10 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 from passlib.context import CryptContext
 from datetime import datetime, timedelta
+
+from sentence_transformers import SentenceTransformer
+import numpy as np
+
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/GYM_MANAGEMENT")
 
 # This forces passlib to use the 'bcrypt' package instead of its broken internal logic
@@ -490,17 +494,73 @@ def get_trainer_stats(id: int):
 
 # --- AGENT CHAT (Dummy API for now) ---
 @app.post("/api/chat")
-def chat_endpoint(message: str, user_id: int, role: str):
-    # This will be replaced by your FAISS/Agent logic later
-    return {
-        "answer": f"Agent received your message: '{message}'. Entity resolution for role {role} is in progress.",
-        "status": "simulated"
-    }
+def agent_chat(message: str, current_user_id: int, current_role: str):
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    
+    try:
+        # 1. VECTOR SEARCH
+        # Convert user message into a vector (list of floats)
+        query_embedding = model.encode(message).tolist()
+        
+        # Search the Global_Search_Vectors table using Cosine Distance (<=>)
+        cur.execute("""
+            SELECT entity_type, original_id, display_name, 
+                   (embedding <=> %s::vector) as distance
+            FROM Global_Search_Vectors
+            ORDER BY distance ASC LIMIT 1
+        """, (query_embedding,))
+        
+        match = cur.fetchone()
+        
+        # 2. THE ROUTER
+        # 0.6 is a common threshold; higher means the match is too "far" away
+        if not match or match['distance'] > 0.6:
+            return {"answer": "I couldn't find any specific information about that. Could you be more specific?"}
+
+        e_type = match['entity_type']
+        e_id = match['original_id']
+        e_name = match['display_name']
+
+        # 3. TOOL EXECUTION (Retrieval)
+        if e_type == "Member":
+            if current_role == "Member" and e_id != current_user_id:
+                return {"answer": "For security reasons, you can only access your own records."}
+            
+            cur.execute("SELECT * FROM Member_Activity_Docs WHERE member_id = %s ORDER BY recorded_at DESC LIMIT 1", (e_id,))
+            log = cur.fetchone()
+            details = log['details'] if log else "No recent activity found."
+            return {"answer": f"Records for {e_name}: Last activity: {details}"}
+
+        if e_type == "Equipment":
+            cur.execute("SELECT status FROM Equipment_Assets WHERE asset_id = %s", (e_id,))
+            row = cur.fetchone()
+            status = row['status'] if row else "Unknown"
+            return {"answer": f"The {e_name} is currently {status}."}
+
+        # Managerial Analytics Route
+        if "revenue" in message.lower() or "profit" in message.lower():
+            if current_role != "Manager":
+                return {"answer": "Only the Manager can access financial analytics."}
+            # Reuse your existing financial logic
+            cur.execute("SELECT SUM(final_price_paid) FROM Membership_Enrollments")
+            rev = cur.fetchone()['sum'] or 0
+            return {"answer": f"Our total membership revenue is ₹{rev}."}
+
+        return {"answer": f"I found {e_name} ({e_type}), but I'm not sure what you want to know about it."}
+
+    except Exception as e:
+        print(f"Chat Error: {e}")
+        return {"answer": "I'm having trouble accessing my knowledge base right now."}
+    finally:
+        cur.close()
+        conn.close()
 
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
