@@ -264,7 +264,14 @@ def get_all_classes():
         FROM Class_Schedules s JOIN Employees e ON s.trainer_id = e.employee_id
     """)
     return cur.fetchall()
-
+    
+@app.get("/employee/equipment")
+def get_all_equipment_employee():
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM Equipment_Assets ORDER BY asset_name ASC")
+    return cur.fetchall()
+    
 @app.patch("/attendance/{booking_id}")
 def mark_attendance(booking_id: int, attended: bool):
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
@@ -311,17 +318,29 @@ def create_class(data: ClassCreate):
 def update_equipment_status(id: int, data: StatusUpdate):
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
-    cur.execute("UPDATE Equipment_Assets SET status = %s WHERE asset_id = %s", (data.status, id))
-    conn.commit()
-    return {"message": "Equipment status updated"}
+    try:
+        cur.execute("UPDATE Equipment_Assets SET status = %s WHERE asset_id = %s", (data.status, id))
+        conn.commit()
+        # Fetch updated record to return to frontend
+        cur.execute("SELECT * FROM Equipment_Assets WHERE asset_id = %s", (id,))
+        return cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
 
 @app.patch("/inventory/{id}")
 def update_inventory_stock(id: int, data: StockUpdate):
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
     cur = conn.cursor()
-    cur.execute("UPDATE Inventory_Catalog SET current_stock = %s WHERE item_id = %s", (data.current_stock, id))
-    conn.commit()
-    return {"message": "Stock updated"}
+    try:
+        cur.execute("UPDATE Inventory_Catalog SET current_stock = %s WHERE item_id = %s", (data.current_stock, id))
+        conn.commit()
+        # Fetch updated record
+        cur.execute("SELECT *, (current_stock < 10) as low_stock FROM Inventory_Catalog WHERE item_id = %s", (id,))
+        return cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
 
 @app.get("/suppliers")
 def get_all_suppliers():
@@ -416,6 +435,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
