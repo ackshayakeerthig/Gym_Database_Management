@@ -304,6 +304,21 @@ def get_all_equipment_employee():
     cur = conn.cursor()
     cur.execute("SELECT * FROM Equipment_Assets ORDER BY asset_name ASC")
     return cur.fetchall()
+
+@app.get("/employee/{trainer_id}/class-stats")
+def get_trainer_class_stats(trainer_id: int):
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    # Count Past, Today, and Upcoming
+    cur.execute("""
+        SELECT 
+            COUNT(*) FILTER (WHERE start_time < CURRENT_DATE) as past,
+            COUNT(*) FILTER (WHERE start_time::date = CURRENT_DATE) as today,
+            COUNT(*) FILTER (WHERE start_time > CURRENT_DATE + interval '1 day') as upcoming
+        FROM Class_Schedules 
+        WHERE trainer_id = %s
+    """, (trainer_id,))
+    return cur.fetchone()
     
 @app.patch("/attendance/{booking_id}")
 def mark_attendance(booking_id: int, attended: bool):
@@ -468,6 +483,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
