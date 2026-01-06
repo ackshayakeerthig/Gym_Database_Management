@@ -305,6 +305,24 @@ def get_all_equipment_employee():
     cur.execute("SELECT * FROM Equipment_Assets ORDER BY asset_name ASC")
     return cur.fetchall()
 
+@app.get("/employee/{trainer_id}/classes")
+def get_trainer_specific_classes(trainer_id: int):
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    try:
+        # Fetches only classes for this trainer and counts bookings for each
+        cur.execute("""
+            SELECT s.*, 
+            (SELECT COUNT(*)::int FROM Class_Bookings WHERE schedule_id = s.schedule_id) as booked_count
+            FROM Class_Schedules s 
+            WHERE s.trainer_id = %s
+            ORDER BY s.start_time DESC
+        """, (trainer_id,))
+        return cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+        
 @app.get("/employee/{trainer_id}/class-stats")
 def get_trainer_class_stats(trainer_id: int):
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
@@ -483,6 +501,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
