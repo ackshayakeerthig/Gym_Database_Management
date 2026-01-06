@@ -62,6 +62,11 @@ class StaffUpdate(BaseModel):
 class BookingCreate(BaseModel):
     member_id: int
     schedule_id: int
+
+class PurchaseRequest(BaseModel):
+    member_id: int
+    item_id: int
+    quantity: int
 # --- AUTH LOGIC (Auto-detect Role) ---
 @app.post("/login")
 def login(req: LoginRequest):
@@ -243,7 +248,35 @@ def get_member_purchases(id: int):
         WHERE p.member_id = %s ORDER BY p.sale_timestamp DESC
     """, (id,))
     return cur.fetchall()
-    
+
+@app.post("/member/purchase")
+def member_purchase(req: PurchaseRequest):
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    cur = conn.cursor()
+    try:
+        # Calculate total price based on catalog price
+        cur.execute("SELECT unit_selling_price FROM Inventory_Catalog WHERE item_id = %s", (req.item_id,))
+        item = cur.fetchone()
+        if not item:
+            raise HTTPException(status_code=404, detail="Item not found")
+        
+        total_amount = item['unit_selling_price'] * req.quantity
+        
+        # Insert into Point_Of_Sale. 
+        # THE SUPABASE TRIGGER WILL AUTOMATICALLY REDUCE THE STOCK NOW.
+        cur.execute("""
+            INSERT INTO Point_Of_Sale (member_id, item_id, quantity, total_amount, sale_timestamp)
+            VALUES (%s, %s, %s, %s, CURRENT_TIMESTAMP)
+        """, (req.member_id, req.item_id, req.quantity, total_amount))
+        
+        conn.commit()
+        return {"status": "success", "message": "Transaction recorded"}
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
 
 # --- EMPLOYEE MODULE ---
 
@@ -435,6 +468,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
 
 
